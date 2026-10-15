@@ -11,6 +11,10 @@ import {
   stepsContentHashFromYaml,
 } from '../../schema/clarification.js';
 import { atomicitySchema, computeStructuralSignal, evaluateAtomicityFinal } from '../../schema/node.js';
+import { findingContentHash, toFindingInput } from '../../schema/finding.js';
+import { currentChallengeInputs } from '../../clarification/challenge-store.js';
+import { readCurrentFindings, readProposals } from '../../clarification/proposal-decision-store.js';
+import { ensureWorkspace } from '../../clarification/workspace.js';
 import type { Output } from '../output.js';
 
 /**
@@ -108,6 +112,32 @@ export async function runCompute(
   output.out(String(evaluateAtomicityFinal(parsed.data)));
 }
 
+/**
+ * Prints the current input hashes the Proposal/Decision/Assumption gates
+ * compare against, as YAML flow entries that paste straight into
+ * input_snapshot / evidence_refs. Proposals are listed with their claim hash.
+ */
+export async function runInputHashes(options: { cwd?: string | undefined; kind?: string | undefined }, output: Output): Promise<void> {
+  const root = path.join(options.cwd ?? process.cwd(), 'product');
+  await ensureWorkspace(root);
+  const current = await currentChallengeInputs(root);
+  const entries = [
+    ...current.inputs,
+    ...(await readProposals(root)).map((p) => ({ kind: 'proposal', ref: p.id, content_hash: p.claim_hash })),
+  ].filter((e) => options.kind === undefined || e.kind === options.kind);
+  for (const e of entries) output.out(`- { kind: ${e.kind}, ref: ${e.ref}, content_hash: ${e.content_hash} }`);
+  for (const u of current.unavailable) output.err(`unavailable: ${u.ref} (${u.reason})`);
+}
+
+/** claim_hash for finding_refs, and finding_hash for an Assumption. */
+export async function runFindingClaimHash(id: string, options: { cwd?: string | undefined }, output: Output): Promise<void> {
+  const root = path.join(options.cwd ?? process.cwd(), 'product');
+  await ensureWorkspace(root);
+  const finding = (await readCurrentFindings(root)).find((f) => f.id === id);
+  if (!finding) throw new CliError(`Finding ${id} not found.`, ExitCode.USAGE_OR_IO);
+  output.out(findingContentHash(toFindingInput(finding)));
+}
+
 export function registerComputeCommand(program: Command, output: Output): void {
   const compute = program
     .command('compute')
@@ -136,6 +166,18 @@ export function registerComputeCommand(program: Command, output: Output): void {
     .argument('<statement>', 'file holding one Node statement, or - for stdin')
     .description('print a Node structural_signal as JSON (conjunction_count, multiple_predicates)')
     .action(async (source: string) => runCompute('structural-signal', source, {}, output));
+
+  compute
+    .command('input-hashes')
+    .option('--kind <kind>', 'only this input kind (finding, node, edge, proposal, ...)')
+    .description('print current input hashes as input_snapshot / evidence_refs entries')
+    .action(async (opts: { kind?: string }) => runInputHashes({ kind: opts.kind }, output));
+
+  compute
+    .command('finding-claim-hash')
+    .argument('<finding>', 'Finding ID (FND-...)')
+    .description('print a Finding claim_hash (finding_refs[].claim_hash, Assumption finding_hash)')
+    .action(async (id: string) => runFindingClaimHash(id, {}, output));
 
   compute
     .command('atomicity-final')
