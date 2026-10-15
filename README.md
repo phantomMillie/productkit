@@ -2,9 +2,12 @@
 
 # ProductKit
 
-**Turn a one-line idea into a product definition where every decision has a receipt.**
+**Ever asked for something "clean" and got back something you didn't picture at all?**
 
-A local CLI plus Agent Skills for Claude Code and Codex. The AI asks, challenges and proposes. You decide. ProductKit records who decided what, and why.
+Words are fuzzier than we think. The same sentence lands differently on different people.<br>
+ProductKit finds the spots in your idea where the meaning splits, and has you pick one yourself.
+
+It's a local CLI plus Agent Skills for Claude Code and Codex. The AI asks questions, pushes back, and lays out options. You make the call. Who picked what, and why, stays on file.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D20.19-339933.svg)](https://nodejs.org)
@@ -16,45 +19,85 @@ English · [한국어](README.ko.md)
 
 ---
 
-## Why
+## Words are fuzzier than we think
 
-Ask an AI to "build a running-log sharing app" and it will happily fill every blank with something plausible. Weeks later nobody can say which behavior was a decision and which was a guess.
+You've probably said something like this when handing off work:
 
-ProductKit puts a guard rail between the idea and the spec:
+> Make this screen clean. Just handle the rest.
 
-- **AI guesses never become decisions.** A `DEC-xxx` exists only when *you* said so, with a rationale.
-- **Unknowns stay visible.** What the AI can't resolve becomes a `FND-xxx` finding and a question, not an invented requirement.
-- **Everything traces back.** Definition → Decision → Prompt. Your original words are preserved verbatim.
-- **Approval goes stale.** Change an input after approving and the approval is invalidated.
-- **No LLM inside the CLI.** The CLI only handles files, schemas and validation. Reasoning happens in your own Claude Code or Codex session, so there is no extra API key and no hidden model call.
+You have a picture in your head. The person on the other end can hear it a bunch of different ways. (Made-up example, just to show the idea.)
+
+| What you said | What they might hear |
+|---|---|
+| clean | fewer elements / tidier spacing and alignment / matching colors / refactored code |
+| handle the rest | only what's on screen / related features too / ask me if stuck / don't ask, just go |
+| (done) well | fast / safe / pretty / same as before |
+
+Between people, you'd just ask, "Clean how?" AI usually doesn't ask. It picks whatever sounds reasonable and fills it in. The result looks fine, so you don't notice it guessed wrong. A few weeks later, nobody remembers which parts someone actually decided and which parts the AI made up.
+
+## So we built this
+
+ProductKit doesn't come up with ideas for you. **It finds the gaps in an idea you described loosely, and gets them filled in.** More precisely: it stops the AI from filling those gaps on its own, and makes sure a person does.
+
+- When the meaning splits, the AI doesn't pick one. It leaves a question instead. That's a `FND-xxx` Finding.
+- You decide which reading is right. Only when you say so, with a reason, does it become a `DEC-xxx` Decision.
+- The CLI checks whether each step is really done. The AI can say "all done," but if the CLI doesn't pass it, it isn't.
+
+## How the gaps get found
+
+Drop in a one-line idea, and it walks through these steps one at a time.
+
+1. **Save the original** (`intake`). Before any interpreting, your exact words get saved. Everything that comes later can be traced back to a specific part of them.
+2. **Pin down the words.** What does "clean" mean here? It writes that down, and marks what you actually said (`user_stated`) separately from what the AI guessed (`ai_inferred`).
+3. **Split the sentence.** If one sentence carries several requests, they get pulled apart. "Make it clean" and "handle the rest" are two different asks.
+4. **Look for blanks.** Who, what, when, how. Whatever can't be filled in is a gap.
+5. **Check for clashes.** See whether any of those requests conflict with or depend on each other.
+6. **Check for other readings.** Find the places where the same words could mean different things, and list every reading. Nothing gets picked here. Picking is your job, so it goes to a Finding.
+7. **"Here's what I got. Is that right?"** The AI puts its understanding right next to your original words and asks you to confirm. This step only ends when you say yes.
+
+After that, the split readings get settled one by one.
+
+```text
+FND-003  no standard for "clean"   -> 3 readings (fewer elements / spacing / matching colors)
+   ↓ Proposal: each option shown with its upsides, costs and risks
+DEC-005  "fewer elements only"     -> you picked it; your reason is recorded
+```
+
+If even one Critical Finding is still open, the definition can't be finalized. Everything that gets decided can be traced back: Definition → Decision → your original words.
+
+### Keeping the gaps closed
+
+- An AI guess never counts as a decision. A `DEC-xxx` only exists when a person actually said it.
+- If something changes after you approve, that approval is void. It needs a fresh look.
+- There's no AI inside the CLI. The CLI just saves files and checks that they're in the right shape. The thinking happens in the Claude Code or Codex session you're already using, so there's no extra API key and no model being called behind your back.
 
 ## How it works
 
 <p align="center"><img src="docs/assets/how-it-works.svg" alt="How ProductKit works: you decide, the agent reasons, the CLI judges and records" width="100%"></p>
 
-The CLI judges whether each stage is actually complete. The agent cannot declare itself done.
+You choose, the AI asks and thinks, and the CLI checks whether things are done and keeps the record.
 
 ## Quick start
 
-Requires Node.js 20.19+ and Git.
+You'll need Node.js 20.19+ and Git.
 
 ```bash
 npm install --global "git+https://github.com/gilgim/productkit.git#v0.1.0-beta.1"
 productkit --version        # 0.1.0-beta.1
 ```
 
-> The name `productkit` on the npm registry belongs to another project, so install from the GitHub tag as above.
+> The `productkit` on npm is a different project that happens to share the name, so install from the GitHub tag like above.
 
-Create a workspace inside your app and feed it an idea:
+Set up a workspace in your app folder and drop in your idea:
 
 ```bash
 cd ~/projects/my-app
 productkit init
-productkit intake "I want an app where friends share their running logs"
+productkit intake "<one line of idea to clear up>"
 productkit clarify
 ```
 
-`clarify` doesn't write anything for you. It tells your agent what to do next:
+`clarify` won't write anything for you. It just tells the AI what to do next:
 
 ```text
 Prompt saved: PRM-001
@@ -67,7 +110,7 @@ AI action required: Clarification has not started.
   Bind prompt_ref + prompt_content_hash in the clarification and new confirmation; do not invent user agreement.
 ```
 
-The gate refuses to pass until the work is real:
+Until the work is actually done, the check won't pass:
 
 ```text
 $ productkit validate
@@ -75,7 +118,7 @@ PRODUCT READINESS BLOCKED
 FAIL definition.required: Product Definition is missing.
 ```
 
-Connect the Skills so Claude Code / Codex can run each stage (see [installation guide](docs/installation.md)):
+Hook up the Skills so Claude Code or Codex can handle each step (see the [installation guide](docs/installation.md)):
 
 ```bash
 PRODUCTKIT_ROOT="$(npm root -g)/productkit"
@@ -85,56 +128,56 @@ for skill in clarify model graph challenge propose define validate; do
 done
 ```
 
-Then, in Claude Code, say `/clarify` and answer the questions. When the definition is approved:
+Then type `/clarify` in Claude Code and answer the questions. Once the definition is approved, you can export it to OpenSpec:
 
 ```bash
 productkit export openspec --change <change-id> --capability <capability-id>
 ```
 
-`export openspec` needs the OpenSpec CLI installed in your workspace; see the [installation guide](docs/installation.md#productkit-and-openspec).
+`export openspec` needs the OpenSpec CLI installed in your workspace. The [installation guide](docs/installation.md#productkit-and-openspec) has the details.
 
 ## What you get
 
-`productkit init` creates a plain-file workspace. Markdown and YAML, diffable, reviewable in a PR.
+`productkit init` gives you a workspace made of plain files. It's all Markdown and YAML, so you can diff it and review it in a PR.
 
 ```text
 product/
-├── sources/      original prompts, preserved verbatim
-├── discovery/    clarifications: who, what, why, flows
-├── nodes/        atomic requirements
-├── graph/        typed relations and impact analysis
-├── findings/     gaps, assumptions, contradictions
-├── proposals/    options with benefits, costs, risks
-├── decisions/    your explicit choices + rationale
+├── sources/      your original idea, untouched
+├── discovery/    who, what, why, and the flow
+├── nodes/        requirements split as small as they go
+├── graph/        how requirements relate and affect each other
+├── findings/     gaps, assumptions, contradictions (split readings land here)
+├── proposals/    options with upsides, costs and risks side by side
+├── decisions/    what you actually picked + why
 ├── journeys/  policies/  assumptions/
 ├── validations/  semantic-reviews/  approvals/
-└── exports/      OpenSpec export manifests
+└── exports/      records of what was exported to OpenSpec
 ```
 
 ## Principles
 
-ProductKit holds ten rules ([CONSTITUTION.md](CONSTITUTION.md)). The ones that matter most:
+ProductKit has ten rules ([CONSTITUTION.md](CONSTITUTION.md)). Here are the ones that matter most:
 
-1. AI inference is never recorded as a user decision.
-2. Unclear points become findings, not guesses.
-3. Every decision carries a rationale.
-4. Every definition item traces back to the original prompt.
-5. Alternatives show benefits, costs and risks together, not just upsides.
-6. An unresolved Critical finding blocks the definition.
-7. Product definition and implementation spec stay separate. No invented schemas or APIs.
+1. Never record an AI guess as if a person decided it.
+2. If something's unclear, don't guess. Leave a Finding.
+3. Every decision needs a reason.
+4. Everything in the definition has to trace back to the original idea.
+5. When showing options, show the costs and risks too, not just the upsides.
+6. Don't finalize the definition while a Critical Finding is still open.
+7. Keep the product definition and the implementation spec apart. Don't make up DB schemas or APIs.
 
-## Honest limits
+## Limits
 
-- This is a **v0 beta**. The structure (files, schemas, gates, hashes) is covered by 248 automated tests.
-- Passing validation proves **structure**, not that the product is right. Semantic quality depends on the agent and on you.
-- The CLI cannot verify who typed a confirmation. Only record a decision or approval after a real human said it.
+- It's still a **v0 beta**. The structure (files, schemas, checks, hashes) is covered by 248 automated tests.
+- Clearing up the ambiguity doesn't mean the product is right. Passing the check means the **format** is right. How many split readings get caught depends on the AI and on you.
+- The CLI can't tell who typed a confirmation or approval. So please only record a decision or approval after a real person actually said it.
 
 ## Docs
 
 | | |
 |---|---|
 | [CLI reference](docs/cli.md) | every command, option and exit code |
-| [Architecture](docs/architecture.md) | roles, storage, gates |
+| [Architecture](docs/architecture.md) | roles, storage, checks |
 | [Artifact contracts](docs/artifact-contracts.md) | field-level schemas |
 | [Installation](docs/installation.md) | pinned install, Skills, OpenSpec |
 | [Roadmap](docs/roadmap.md) | Change 01–09 |
@@ -147,7 +190,7 @@ npm install && npm run build
 npm test
 ```
 
-Issues and pull requests are welcome. ProductKit's own development is managed with OpenSpec (`openspec/changes/`).
+Issues and PRs are always welcome. ProductKit itself is developed with OpenSpec (`openspec/changes/`).
 
 ## License
 
