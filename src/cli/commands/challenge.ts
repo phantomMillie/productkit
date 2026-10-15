@@ -5,7 +5,7 @@ import type { Command } from 'commander';
 import { CliError, ExitCode } from '../../errors.js';
 import { ensureWorkspace, markStage } from '../../clarification/workspace.js';
 import { addFinding, confirmFinding, readFindings, validateFindingReferences } from '../../clarification/finding-store.js';
-import { createChallengeRun, readChallengeRuns, refreshChallengeRun, updateChallengeRun, validateChallengeRunReferences } from '../../clarification/challenge-store.js';
+import { createChallengeRun, describeInputDrift, readChallengeRuns, refreshChallengeRun, STALE_REVIEW_HINT, updateChallengeRun, validateChallengeRunReferences } from '../../clarification/challenge-store.js';
 import { challengeAreaSchema, challengeAreaResultSchema, judgeChallengeCompletion } from '../../schema/challenge.js';
 import { findingInputSchema } from '../../schema/finding.js';
 import type { Output } from '../output.js';
@@ -25,20 +25,20 @@ export function registerChallengeCommand(program: Command, output: Output): void
   command.command('review-resume').argument('<id>').description('resume only a current-input review checkpoint').action(async (id: string) => {
     const root = path.join(process.cwd(), 'product'); await ensureWorkspace(root); const run = (await readChallengeRuns(root)).find((r) => r.id === id);
     if (!run) throw new CliError(`Review ${id} not found.`, ExitCode.USAGE_OR_IO);
-    const checked = await refreshChallengeRun(root, run); if (checked.stale) { await updateChallengeRun(root, id, (r) => ({ ...r, status: 'stale', history: [...r.history, { event: 'invalidated', at: new Date().toISOString(), statement: 'Input fingerprint changed; checkpoint cannot resume.', content_hash: r.review_hash }] })); throw new CliError(`Review ${id} is stale; create a new review.`, ExitCode.GATE_BLOCKED); }
+    const checked = await refreshChallengeRun(root, run); if (checked.stale) { await updateChallengeRun(root, id, (r) => ({ ...r, status: 'stale', history: [...r.history, { event: 'invalidated', at: new Date().toISOString(), statement: 'Input fingerprint changed; checkpoint cannot resume.', content_hash: r.review_hash }] })); throw new CliError(`Review ${id} is stale; create a new review.`, ExitCode.GATE_BLOCKED, [...(await describeInputDrift(root, run)), STALE_REVIEW_HINT]); }
     output.out(`Review ${id} resumed at its saved checkpoint. Status: ${run.status}.`);
   });
   command.command('review-area').argument('<id>').argument('<area>').requiredOption('--status <status>', 'reviewed, not_applicable, or not_reviewed').option('--rationale <text>').option('--evidence <kind:ref...>', 'typed evidence reference', (value: string, prior: string[] = []) => [...prior, value], [] as string[]).description('checkpoint a review area').action(async (id: string, area: string, opts: { status: string; rationale?: string; evidence: string[] }) => {
     const parsedArea = challengeAreaSchema.parse(area); const result = challengeAreaResultSchema.parse({ status: opts.status, ...(opts.rationale ? { rationale: opts.rationale } : {}), evidence_refs: opts.evidence.map((value) => { const [kind, ...rest] = value.split(':'); return { kind, ref: rest.join(':') }; }) });
     const root = path.join(process.cwd(), 'product'); const runs = await readChallengeRuns(root); if (!runs.some((r) => r.id === id)) throw new CliError(`Review ${id} not found.`, ExitCode.USAGE_OR_IO);
-    const checkpoint = runs.find((r) => r.id === id)!; if ((await refreshChallengeRun(root, checkpoint)).stale || checkpoint.status === 'stale') throw new CliError('Stale review cannot be resumed; create a new review.', ExitCode.GATE_BLOCKED);
+    const checkpoint = runs.find((r) => r.id === id)!; if ((await refreshChallengeRun(root, checkpoint)).stale || checkpoint.status === 'stale') throw new CliError('Stale review cannot be resumed; create a new review.', ExitCode.GATE_BLOCKED, [...(await describeInputDrift(root, checkpoint)), STALE_REVIEW_HINT]);
     const updated = await updateChallengeRun(root, id, (r) => ({ ...r, status: 'in_progress', areas: { ...r.areas, [parsedArea]: result }, history: [...r.history, { event: 'checkpointed', at: new Date().toISOString(), statement: `Recorded ${parsedArea}: ${result.status}.`, content_hash: r.review_hash }] }));
     output.out(`Review ${id} checkpointed: ${parsedArea}=${result.status}.`);
   });
   command.command('review-complete').argument('<id>').description('finish recorded review coverage without resolving Findings').action(async (id: string) => {
     const root = path.join(process.cwd(), 'product'); await ensureWorkspace(root); const run = (await readChallengeRuns(root)).find((r) => r.id === id);
     if (!run) throw new CliError(`Review ${id} not found.`, ExitCode.USAGE_OR_IO);
-    const fresh = await refreshChallengeRun(root, run); if (fresh.stale) throw new CliError('Review inputs changed; start a new review.', ExitCode.GATE_BLOCKED);
+    const fresh = await refreshChallengeRun(root, run); if (fresh.stale) throw new CliError('Review inputs changed; start a new review.', ExitCode.GATE_BLOCKED, [...(await describeInputDrift(root, run)), STALE_REVIEW_HINT]);
     const status = judgeChallengeCompletion(run);
     if (status !== 'complete') throw new CliError('Review coverage is incomplete; record every area and explain unavailable inputs.', ExitCode.GATE_BLOCKED);
     const updated = await updateChallengeRun(root, id, (r) => ({ ...r, status: 'complete', history: [...r.history, { event: 'completed', at: new Date().toISOString(), statement: 'All required review areas have recorded coverage. This is not semantic correctness or product approval.', content_hash: r.review_hash }] }));

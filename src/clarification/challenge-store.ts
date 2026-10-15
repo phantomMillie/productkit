@@ -64,6 +64,20 @@ export async function updateChallengeRun(root: string, id: string, update: (run:
   const updated = update(current); const changed = { ...updated, updated_at: new Date().toISOString() };
   const final = challengeRunSchema.parse({ ...changed, review_hash: challengeRunHash(changed as ChallengeRun) }); await atomicReplaceIfUnchanged(file, before, stringifyYaml(final)); return final;
 }
+/** Names which inputs moved since a review started, so a stale error says why. */
+export async function describeInputDrift(root: string, run: ChallengeRun): Promise<string[]> {
+  const current = await currentChallengeInputs(root);
+  const saved = new Map(run.inputs.map((i) => [`${i.kind}:${i.ref}`, i.content_hash]));
+  const now = new Map(current.inputs.map((i) => [`${i.kind}:${i.ref}`, i.content_hash]));
+  const drift: string[] = [];
+  for (const [key, hash] of now) if (!saved.has(key)) drift.push(`${key} added`); else if (saved.get(key) !== hash) drift.push(`${key} changed`);
+  for (const key of saved.keys()) if (!now.has(key)) drift.push(`${key} removed`);
+  for (const item of current.unavailable) drift.push(`unavailable: ${item.ref} (${item.reason})`);
+  return drift;
+}
+
+export const STALE_REVIEW_HINT = 'Findings (including user confirmations), Nodes, Graph records and the challenge Skill are review inputs. Add Findings and record the user\'s confirmations first, then run review-start, checkpoint every area and review-complete.';
+
 export async function refreshChallengeRun(root: string, run: ChallengeRun): Promise<{ run: ChallengeRun; stale: boolean; completion: 'complete' | 'incomplete' }> {
   const current = await currentChallengeInputs(root); const stale = canonicalJson(current.inputs) !== canonicalJson(run.inputs) || canonicalJson(current.scope) !== canonicalJson(run.scope.included) || current.unavailable.length > 0;
   const completion = stale ? 'incomplete' : judgeChallengeCompletion({ ...run, status: run.status });
