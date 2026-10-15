@@ -113,6 +113,7 @@ export async function runModel(options: ModelOptions, output: Output): Promise<v
     output.out(`  Write to:      ${path.relative(cwd, groupPath)}`);
     output.out('  Completion contract: source_content_hash + clarification_content_hash; final atomic Nodes only.');
     output.out('  Every source item needs condition/operator/exception preservation reviews; retain split-required history in retired_nodes with split_from on new Nodes.');
+    output.out('  Hashes and signals: productkit compute steps-hash | clarification-content-hash | structural-signal | atomicity-final.');
     return;
   }
 

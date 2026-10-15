@@ -21,7 +21,9 @@ productkit graph candidate add --input <candidate-input.yaml>
 
 The CLI computes the Candidate ID and endpoint snapshots. Repeated submissions of the same hypothesis are idempotent. A Candidate is not a Graph Edge, is never confirmed or propagated, and appears in ImpactReport `blocked_inputs`; its presence makes the report incomplete. Do not translate `causes` to `depends_on` or `contains` to `derived_from`.
 
-For a supported relation, prepare an Edge YAML with a unique `EDG-...` ID, supported `type`, `source`, `target`, `basis`, non-empty `reason`, `status: proposed`, and `confirmations: []`. Use `productkit graph edge add --input <edge.yaml>`. The CLI rejects invalid references, endpoint kinds, self-edges, duplicates, and unsupported types. It does not create confirmed edges.
+Input files are YAML. Quote any value that contains `: ` (colon and space) or starts with a quote, for example `proposed_meaning: 'cause (source: ...)'`; otherwise the parser reads it as a key and the command fails.
+
+For a supported relation, prepare an Edge YAML with a unique `EDG-...` ID, supported `type`, `source`, `target`, `basis`, non-empty `reason`, `status: proposed`, and `confirmations: []`. Use `productkit graph edge add --input <edge.yaml>`. The CLI rejects invalid references, endpoint kinds, self-edges, duplicates, and unsupported types. It does not create confirmed edges. `conflicts_with` and `duplicates` have no direction; `edge add` stores them with the endpoints in canonical ID order (plain string order, so `NOD-001-11` comes before `NOD-001-8`) and says so when it swaps them. Refer to the stored direction afterwards.
 
 ## User confirmation
 

@@ -71,6 +71,32 @@ finding_candidates: []   # [{statement, type: ambiguity|contradiction|missing_pr
   문제). 따옴표 없이 쓰거나, 정 필요하면 YAML 작은따옴표 규칙(`''`로 이스케이프)
   을 따른다.
 
+## 완료 검사 규칙 (CLI가 실제로 보는 것)
+
+`productkit clarify`는 아래를 모두 검사한다. 하나라도 어기면 사용자가 동의해도
+완료되지 않는다. **사용자에게 확인을 받기 전에** `productkit clarify`를 실행해
+`Pre-check: ... only the user confirmation is missing.`가 나오는지 본다. `Fix before
+asking the user to confirm:`가 나오면 먼저 고친다. 확인 후에 `steps`를 고치면 해시가
+바뀌어 확인을 다시 받아야 한다.
+
+- `definition`: 1개 이상, `term`·`meaning`이 실제 내용이다.
+- `decomposition`: 1개 이상, 각 `statement`에 `span_refs`가 1개 이상이고 모두 현재
+  Prompt의 span id다.
+- `elaboration`: 1개 이상, 각 항목에 `statement`·`actor`·`object`·`condition`·`action`·
+  `result`가 모두 있다. **각 `statement`는 `decomposition`의 어떤 `statement`와 글자까지
+  똑같아야 하고, 모든 `decomposition` 문장이 최소 한 번씩 `elaboration`에 나와야 한다.**
+  구체화 내용은 나머지 다섯 필드에 쓴다.
+- `relation_check`: 각 항목의 `statement_a`·`statement_b`는 **서로 다른 두
+  `decomposition` 문장과 글자까지 똑같아야 한다.** 비어 있으면
+  `relation_check_no_items_reason`을 쓰고, 항목이 있으면 그 이유 필드는 두지 않는다.
+- `counterexample`: 각 항목에 `possible_interpretations`가 2개 이상이다. 비어 있으면
+  `counterexample_no_items_reason`을 쓰고, 항목이 있으면 그 이유 필드는 두지 않는다.
+- 자리표시 값은 내용으로 치지 않는다: 빈 문자열, `...`·`-`·`?`만 있는 값, `TBD`·
+  `TODO`·`unknown`·`placeholder`·`N/A`·`null`·`미정`·`미작성`·`작성 예정`·`알 수 없음`·
+  `해당 없음`. 원문에 없는 내용은 `원문에 명시 없음`처럼 사실대로 쓴다.
+- 최상위 `prompt_content_hash`는 Prompt 파일의 `content_hash`와 같다.
+- `finding_candidates[].span_refs`도 현재 Prompt의 span id여야 한다.
+
 ## 해석 확인 (완료의 핵심 조건)
 
 1. `steps`를 바탕으로 사용자 의도를 논리 구조 그대로 재구성한 문장을 만들어

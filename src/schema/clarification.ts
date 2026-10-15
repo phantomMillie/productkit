@@ -211,6 +211,26 @@ export function judgeCompletion(clarification: Clarification, prompt?: Prompt): 
   return { confirmed: true };
 }
 
+/**
+ * Every completion check that does not depend on a user confirmation.
+ * judgeCompletion reaches these only after an agreed entry exists, so a
+ * structurally broken draft used to surface only after the user had already
+ * confirmed it — and fixing it changed the steps hash and forced a second
+ * confirmation. Running this first lets the Agent fix the draft before asking.
+ */
+export function preConfirmationIssue(clarification: Clarification, prompt?: Prompt): Extract<CompletionJudgement, { confirmed: false }> | undefined {
+  const issue = clarificationStepsIssue(clarification.steps);
+  if (issue) return issue;
+  if (!prompt) return { confirmed: false, reason: 'missing_prompt' };
+  if (prompt.id !== clarification.prompt_ref) return { confirmed: false, reason: 'invalid_prompt_reference' };
+  const promptIssue = promptIntegrityIssue(prompt);
+  if (promptIssue) return { confirmed: false, reason: 'prompt_integrity_violation', detail: promptIssue };
+  if (clarification.prompt_content_hash !== prompt.content_hash) return { confirmed: false, reason: 'prompt_changed_since_clarification', detail: 'Set prompt_content_hash to the Prompt content_hash.' };
+  const spanIds = new Set(prompt.spans.map(s => s.id));
+  if (clarification.steps.decomposition.some(d => d.span_refs.some(ref => !spanIds.has(ref))) || clarification.finding_candidates.some(f => f.span_refs.some(ref => !spanIds.has(ref)))) return { confirmed: false, reason: 'invalid_step_reference', detail: 'A source span reference does not resolve in the current Prompt.' };
+  return undefined;
+}
+
 /** Completion requirements are stricter than parsing an editable, unfinished draft. */
 export function clarificationStepsIssue(steps: ClarificationSteps): Extract<CompletionJudgement, { confirmed: false }> | undefined {
   const incomplete = (detail: string) => ({ confirmed: false as const, reason: 'incomplete_steps' as const, detail });

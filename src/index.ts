@@ -37,6 +37,8 @@ export {
   stepsContentHashFromYaml,
   computeEntryHash,
   judgeCompletion,
+  preConfirmationIssue,
+  clarificationStepsIssue,
   type Clarification,
   type ClarificationSteps,
   type InterpretationCheckEntry,

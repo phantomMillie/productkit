@@ -36,7 +36,8 @@ Codex가 공유한다. CLI는 이 내용을 생성하지 않는다 — 이 instr
 ```yaml
 id: NDG-001
 clarification_ref: CLR-001
-source_content_hash: "<steps 전체의 정규화 해시>"
+source_content_hash: "<productkit compute steps-hash product/discovery/CLR-001.yaml>"
+clarification_content_hash: "<productkit compute clarification-content-hash product/discovery/CLR-001.yaml>"
 nodes:
   - id: NOD-001-1
     kind: fact | inference | requirement | policy
@@ -45,26 +46,56 @@ nodes:
     derived_from:
       clarification_ref: CLR-001
       decomposition_index: 0   # steps.decomposition 배열의 0-based 인덱스
-    structural_signal:
-      conjunction_count: 0
-      multiple_predicates: false
+    structural_signal: <productkit compute structural-signal 결과 JSON>
     atomicity:
       single_verifiable_subject: { verdict: "yes", reason: "..." }
       decomposability: { verdict: "not_applicable", reason: "..." }
       meaning_preservation: { verdict: "preserved", confidence: "high", reason: "..." }
-      final: atomic   # split_required | null — 아래 "원자성 판정" 참고
+      final: atomic   # productkit compute atomicity-final 결과 — 아래 "원자성 판정" 참고
+  - id: NOD-001-3          # 분해로 새로 만든 Node
+    split_from: NOD-001-2  # retired_nodes 의 원래 Node
+    # ... 나머지 필드는 위와 같다. derived_from 은 원래 Node와 같은 CLR·index
+retired_nodes:            # 분해했을 때만. split_required 로 판정된 원래 Node를 그대로 남긴다
+  - id: NOD-001-2
+    # ... atomicity.final: split_required, 자식(split_from 이 이 id인 Node)이 2개 이상
 coverage:
   complete: true
   uncovered_decomposition_indices: []
-distortion_checks:
+distortion_checks:        # decomposition 항목마다 정확히 하나
   - decomposition_index: 0
     reconstructed_statement: "..."
+    condition_preservation: { verdict: preserved | not_applicable, reason: "..." }
+    operator_preservation: { verdict: preserved | not_applicable, reason: "..." }
+    exception_preservation: { verdict: preserved | not_applicable, reason: "..." }
     verdict: preserved | distorted | uncertain
     confidence: low | medium | high
     reason: "..."
 finding_candidates: []   # 아래 "위험 신호" 참고
 status: in_progress   # in_progress | needs_review | modeled — CLI가 다시 계산하므로 직접 믿지 않음
 ```
+
+## 완료 검사 규칙 (CLI가 실제로 보는 것)
+
+`productkit model`은 아래를 모두 검사한다.
+
+- `source_content_hash`는 현재 Clarification `steps`의 해시(`productkit compute
+  steps-hash`)와 같다. `clarification_content_hash`는 Clarification 전체(상태 제외)의
+  해시(`productkit compute clarification-content-hash`)와 같다. Clarification을 다시
+  확인받으면 이 값도 바뀐다.
+- 입력 Clarification이 confirmed다.
+- Node id는 `nodes`·`retired_nodes`를 통틀어 겹치지 않는다. `statement`와 세 판정의
+  `reason`은 자리표시 값이 아니다(clarify Skill의 목록과 같다).
+- `origin: source`인 Node가 가리키는 decomposition 항목에는 `span_refs`가 있어야 한다.
+- 모든 decomposition 항목을 `nodes` 중 하나 이상이 덮는다(`retired_nodes`는 세지 않는다).
+- `nodes`의 `final`은 모두 `atomic`이고, 세 판정에서 다시 계산한 값과 같다.
+- 분해했으면: 원래 Node는 `final: split_required`로 `retired_nodes`에 남고, 새 Node
+  2개 이상이 `split_from`으로 그 Node를 가리키며 같은 CLR·`decomposition_index`를
+  가진다. `split_from` 고리는 순환하면 안 된다.
+- `distortion_checks`는 decomposition 항목마다 정확히 하나이고, 세 보존 검토
+  (`condition_preservation`·`operator_preservation`·`exception_preservation`)가 모두
+  `preserved` 또는 `not_applicable`이며 `reason`이 있다. `verdict`는 `preserved`여야
+  완료된다(`distorted`·`uncertain`은 막힌다).
+- 열린(`open`) `addition`·`condition_change`·`operator_change`·`distortion` 후보가 없다.
 
 ## 원자성 판정 — 세 기준을 순서대로 평가한다
 

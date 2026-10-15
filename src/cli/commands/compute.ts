@@ -4,11 +4,13 @@ import type { Command } from 'commander';
 
 import { CliError, ExitCode, describeCause } from '../../errors.js';
 import {
+  clarificationContentHash,
   computeEntryHash,
   interpretationCheckEntrySchema,
+  parseClarification,
   stepsContentHashFromYaml,
 } from '../../schema/clarification.js';
-import { atomicitySchema, evaluateAtomicityFinal } from '../../schema/node.js';
+import { atomicitySchema, computeStructuralSignal, evaluateAtomicityFinal } from '../../schema/node.js';
 import type { Output } from '../output.js';
 
 /**
@@ -19,7 +21,7 @@ import type { Output } from '../output.js';
  * value the CLI gates recompute.
  */
 
-export type ComputeHelper = 'steps-hash' | 'entry-hash' | 'atomicity-final';
+export type ComputeHelper = 'steps-hash' | 'entry-hash' | 'atomicity-final' | 'clarification-content-hash' | 'structural-signal';
 
 export interface ComputeOptions {
   cwd?: string | undefined;
@@ -69,6 +71,24 @@ export async function runCompute(
     return;
   }
 
+  if (helper === 'clarification-content-hash') {
+    let hash: string;
+    try {
+      hash = clarificationContentHash(parseClarification(text));
+    } catch (cause) {
+      throw new CliError(`Could not read a Clarification from ${source}: ${describeCause(cause)}`, ExitCode.USAGE_OR_IO);
+    }
+    output.out(hash);
+    return;
+  }
+
+  if (helper === 'structural-signal') {
+    const statement = text.replace(/\r?\n$/, '');
+    if (statement.trim().length === 0) throw new CliError(`${source} has no statement text.`, ExitCode.USAGE_OR_IO);
+    output.out(JSON.stringify(computeStructuralSignal(statement)));
+    return;
+  }
+
   if (helper === 'entry-hash') {
     // Same shape the completion gate re-hashes: every parsed field except
     // entry_hash, including id. Unknown keys are dropped exactly as the gate's
@@ -104,6 +124,18 @@ export function registerComputeCommand(program: Command, output: Output): void {
     .argument('<entry>', 'interpretation_check entry as JSON (entry_hash may be omitted), or - for stdin')
     .description('print entry_hash for an interpretation_check entry (hashes every field but entry_hash, id included)')
     .action(async (source: string) => runCompute('entry-hash', source, {}, output));
+
+  compute
+    .command('clarification-content-hash')
+    .argument('<clarification>', 'Clarification YAML file, or - for stdin')
+    .description('print clarification_content_hash for a NodeGroup (whole Clarification except status)')
+    .action(async (source: string) => runCompute('clarification-content-hash', source, {}, output));
+
+  compute
+    .command('structural-signal')
+    .argument('<statement>', 'file holding one Node statement, or - for stdin')
+    .description('print a Node structural_signal as JSON (conjunction_count, multiple_predicates)')
+    .action(async (source: string) => runCompute('structural-signal', source, {}, output));
 
   compute
     .command('atomicity-final')
