@@ -9,6 +9,7 @@ import {
   type CompletionBlockReason,
   judgeCompletion,
   parseClarification,
+  preConfirmationIssue,
 } from '../../schema/clarification.js';
 import type { Output } from '../output.js';
 
@@ -114,5 +115,22 @@ export async function runClarify(options: ClarifyOptions, output: Output): Promi
   if (judgement.detail) {
     output.out(`  Detail: ${judgement.detail}`);
   }
+  if (WAITING_FOR_USER.has(judgement.reason)) {
+    const pre = preConfirmationIssue(clarification, sourcePrompt);
+    if (pre) {
+      output.out(`  Fix before asking the user to confirm: ${REASON_MESSAGES[pre.reason]}`);
+      if (pre.detail) output.out(`    ${pre.detail}`);
+    } else {
+      output.out('  Pre-check: the steps pass every structural completion check; only the user confirmation is missing.');
+    }
+  }
   output.out(`  Instruction: ${instructionPath}`);
 }
+
+/** Reasons that only a (new) user confirmation can clear. */
+const WAITING_FOR_USER: ReadonlySet<CompletionBlockReason> = new Set([
+  'no_confirmation',
+  'not_agreed',
+  'missing_user_statement',
+  'content_changed_since_confirmation',
+]);
