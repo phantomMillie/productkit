@@ -52,10 +52,15 @@ selection: { kind: proposal_option, proposal_ref: PROP-..., option_ref: OPT-B }
 proposal_ref: PROP-...                   # must repeat the selection for proposal_option
 option_ref: OPT-B
 input_snapshot:
+  - { kind: prompt, ref: PRM-..., content_hash: <from input-hashes --kind prompt> }   # required
   - { kind: finding, ref: FND-..., content_hash: ... }
   - { kind: proposal, ref: PROP-..., content_hash: <proposal claim hash, from input-hashes> }
 ```
 
-When the user chooses something that is not exactly one option (a combination or an amended option), use `selection: { kind: direct_user_decision, text: <the user's chosen text> }` and omit `proposal_ref`/`option_ref`.
+The source Prompt is required: Definition items, Policies and Journeys can cite a Decision only through the Prompt in its own snapshot, so `decide record` refuses a Decision without one.
+
+When the user chooses something that is not exactly one option (a combination or an amended option), use `selection: { kind: direct_user_decision, text: <the user's chosen text> }` and omit `proposal_ref`/`option_ref`. Keep the Proposal in `input_snapshot` and cover all of its Findings in `finding_refs`: that is how a direct Decision answers the Proposal for validation.
+
+To correct a recorded Decision, record a new one with `supersedes_decision_ref: DEC-<old>`; its `finding_refs` must include all of the old Decision's Findings. Only one active Decision may target a Finding.
 
 Never invent a user statement, select an option on the user's behalf, or claim that a hash proves who spoke. If the user has not replied, leave the Decision uncreated and report the pending question.

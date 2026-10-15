@@ -260,6 +260,58 @@ export function appendFindingConfirmation(
   });
 }
 
+/**
+ * Records that a confirmed Finding was resolved by a content Decision whose
+ * Application has been applied and verified (actor change06_decision). The
+ * claim, its hash and the confirmation history are unchanged.
+ */
+export function appendFindingResolution(findingValue: unknown, decisionRef: string, statement: string, now = new Date()): Finding {
+  const finding = findingSchema.parse(findingValue);
+  if (finding.review_status !== 'confirmed') throw new Error('Only a confirmed Finding can be resolved by a Decision.');
+  if (finding.resolution_status !== 'unresolved') throw new Error('Finding is already resolved, deferred or dismissed.');
+  const finding_hash = findingContentHash(toFindingInput(finding));
+  const recorded_at = now.toISOString();
+  const historyBase = {
+    id: `FHE-${sha256Hex(canonicalJson({ finding: finding.id, event: 'resolution_recorded', finding_hash, decision_ref: decisionRef, recorded_at })).slice(0, 16)}`,
+    event: 'resolution_recorded' as const,
+    actor: 'change06_decision' as const,
+    prior_review_status: finding.review_status,
+    review_status: finding.review_status,
+    prior_resolution_status: finding.resolution_status,
+    resolution_status: 'resolved' as const,
+    finding_hash,
+    statement,
+    decision_ref: decisionRef,
+    recorded_at,
+  };
+  return findingSchema.parse({
+    ...finding,
+    resolution_status: 'resolved',
+    decision_ref: decisionRef,
+    updated_at: recorded_at,
+    history: [...finding.history, { ...historyBase, entry_hash: findingHistoryEntryHash(historyBase) }],
+  });
+}
+
+/**
+ * Hash of a Finding as it stood before any Decision resolved it. ChallengeRun,
+ * Proposal and Decision snapshots cite Findings by this hash, so recording a
+ * resolution (a consequence of a verified Decision) does not make the
+ * Decision that caused it, its Proposal or the review stale. Before any
+ * resolution it equals the full-record hash, so existing snapshots still match.
+ */
+export function findingSnapshotHash(finding: Finding): string {
+  const index = finding.history.findIndex((entry) => entry.event === 'resolution_recorded');
+  if (index < 0) return sha256Hex(canonicalJson(finding));
+  const { decision_ref: _decisionRef, ...rest } = finding;
+  return sha256Hex(canonicalJson({
+    ...rest,
+    resolution_status: finding.history[index]!.prior_resolution_status ?? 'unresolved',
+    updated_at: finding.history[index - 1]!.recorded_at,
+    history: finding.history.slice(0, index),
+  }));
+}
+
 export function parseFinding(yamlText: string): Finding {
   return findingSchema.parse(parseYaml(yamlText));
 }

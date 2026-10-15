@@ -25,6 +25,20 @@ export function canonicalJson(value: unknown): string {
   return JSON.stringify(canonicalize(value));
 }
 
+/**
+ * Trims every string in a value, recursively. The artifact schemas trim their
+ * text fields while parsing, so hashing untrimmed input and then parsing it
+ * produced a content-hash mismatch for any value with leading or trailing
+ * whitespace (for example a YAML `|` block). create* functions hash and parse
+ * the trimmed value instead.
+ */
+export function trimDeep<T>(value: T): T {
+  if (typeof value === 'string') return value.trim() as T;
+  if (Array.isArray(value)) return value.map((item) => trimDeep(item)) as T;
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, trimDeep(v)])) as T;
+  return value;
+}
+
 export function sha256Hex(text: string): string {
   return createHash('sha256').update(text, 'utf8').digest('hex');
 }
