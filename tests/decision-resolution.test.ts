@@ -78,7 +78,7 @@ async function pipeline(selection: 'proposal_option' | 'direct_user_decision', v
   const applied = await applyApplication(root, app.id);
   const findingBefore = parseFinding(await readFile(path.join(root, 'findings', `${finding.id}.yaml`), 'utf8'));
   await recordApplicationVerification(root, applied.id, { status: verifyStatus, assessor: 'user', summary: 'SYNTHETIC.', evidence_refs: [decisionRef], uncertainty: ['Synthetic.'] });
-  return { root, finding, findingBefore, decision, proposal, run, appId: applied.id };
+  return { root, finding, findingBefore, decision, proposal, run, appId: applied.id, policy, promptHash, nodeHash, claim, get, impactId: impact.analysis_id };
 }
 
 describe('content Decisions resolve their Findings once verified', () => {
@@ -173,3 +173,39 @@ describe('compute completes Policy and Journey drafts', () => {
     expect(parseYaml(journeyOut.stdout.join('\n')).id).toMatch(/^JRN-[0-9a-f]{16}$/);
   });
 });
+
+describe('amending after verification', () => {
+  it('re-verifies an Application whose only drift is verification inputs', async () => {
+    const { root, appId, policy } = await pipeline('proposal_option');
+    // Any artifact-hash input change (here a second Policy file) drifts the verification fingerprint.
+    const other = createPolicy({ ...policy, id: 'POL-5555555555555555', context: 'Another policy' });
+    await writeFile(path.join(root, 'policies', `${other.id}.yaml`), stringify(other));
+    const app = parseYaml(await readFile(path.join(root, 'applications', `${appId}.yaml`), 'utf8'));
+    expect((await applicationFreshness(root, app)).reasons).toEqual(['Post-application verification inputs changed']);
+    await recordApplicationVerification(root, appId, { status: 'verified', assessor: 'ai', summary: 'Re-assessed after an unrelated input changed.', evidence_refs: [], uncertainty: ['Synthetic.'] });
+    const again = parseYaml(await readFile(path.join(root, 'applications', `${appId}.yaml`), 'utf8'));
+    expect((await applicationFreshness(root, again)).stale).toBe(false);
+  });
+
+  it('a superseding Decision replaces the Policy and the superseded Application stops counting', async () => {
+    const { root, appId, finding, proposal, policy, promptHash, claim, get, impactId } = await pipeline('proposal_option');
+    const superseding = (await addDecision(root, { decision_type: 'content_decision', finding_refs: [{ finding_ref: finding.id, claim_hash: claim }], selection: { kind: 'direct_user_decision', text: 'SYNTHETIC USER: 48 hours instead.' }, user_statement: 'SYNTHETIC USER ONLY: change to 48h.', rationale: 'Fixture amendment.', scope: 'Fixture scope.', input_snapshot: [{ kind: 'prompt', ref: 'PRM-001', content_hash: promptHash }, { kind: 'finding', ref: finding.id, content_hash: get('finding', finding.id) }, { kind: 'proposal', ref: proposal.id, content_hash: proposal.claim_hash }], supersedes_decision_ref: (await decisionOf(root, appId)) })).decision;
+    const amended = createPolicy({ ...policy, condition_text: 'within 48 hours', condition: { op: 'lte', field: 'hours', value_type: 'number', value: 48 }, provenance: { ...policy.provenance, decision_refs: [{ kind: 'decision', ref: superseding.id, content_hash: superseding.decision_hash }] } });
+    const file = path.join(root, 'policies', `${policy.id}.yaml`);
+    const before = await readFile(file, 'utf8');
+    const after = stringify(amended);
+    const plan = { decision_ref: superseding.id, decision_hash: superseding.decision_hash, scope: 'Amend', rationale: 'Amend', targets: [{ ref: { kind: 'policy', ref: amended.id, content_hash: amended.content_hash }, path: `product/policies/${amended.id}.yaml`, before_hash: sha256Hex(before), after_hash: sha256Hex(after), before_content: before, after_content: after }], finding_refs: [finding.id], residual_risks: [], before_impact_refs: [impactId] };
+    const app = (await createApplication(root, plan)).application;
+    await applyApplication(root, app.id);
+    await recordApplicationVerification(root, app.id, { status: 'verified', assessor: 'ai', summary: 'Amendment applied.', evidence_refs: [], uncertainty: ['Synthetic.'] });
+
+    const report = await createValidationReport(root);
+    expect(report.checks.some((c) => c.id === `application.${appId}`)).toBe(false);
+    expect(report.checks.find((c) => c.id === `application.${app.id}`)?.status).toBe('pass');
+    expect(report.checks.some((c) => c.id.startsWith('proposal.'))).toBe(false);
+  });
+});
+
+async function decisionOf(root: string, appId: string): Promise<string> {
+  return parseYaml(await readFile(path.join(root, 'applications', `${appId}.yaml`), 'utf8')).plan.decision_ref;
+}

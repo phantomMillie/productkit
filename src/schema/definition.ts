@@ -138,8 +138,8 @@ export function parsePolicy(text:string):Policy{return policySchema.parse(parseY
 export function parseJourney(text:string):Journey{return journeySchema.parse(parseYaml(text));}
 export function parseApplication(text:string):Application{return applicationSchema.parse(parseYaml(text));}
 
-export function createPolicy(raw:Omit<Policy,'content_hash'>):Policy { const input=trimDeep(raw); return policySchema.parse({...input,content_hash:sha256Hex(canonicalJson(input))}); }
-export function createJourney(raw:Omit<Journey,'id'|'content_hash'>):Journey { const input=trimDeep(raw); const content_hash=sha256Hex(canonicalJson({...input,id:undefined,content_hash:undefined})); return journeySchema.parse({...input,id:`JRN-${content_hash.slice(0,16)}`,content_hash}); }
+export function createPolicy(raw:Omit<Policy,'content_hash'>):Policy { const {content_hash:_stale,...input}=trimDeep(raw as Policy); return policySchema.parse({...input,content_hash:sha256Hex(canonicalJson(input))}); }
+export function createJourney(raw:Omit<Journey,'id'|'content_hash'>):Journey { const {id:_staleId,content_hash:_stale,...input}=trimDeep(raw as Journey); const content_hash=sha256Hex(canonicalJson({...input,id:undefined,content_hash:undefined})); return journeySchema.parse({...input,id:`JRN-${content_hash.slice(0,16)}`,content_hash}); }
 export function createProductDefinition(raw:Omit<ProductDefinition,'id'|'content_hash'|'history'|'created_at'>,now=new Date()):ProductDefinition {
   const input=trimDeep(raw); const created_at=now.toISOString(); const body={...input,created_at}; const content_hash=sha256Hex(canonicalJson({...body,created_at:undefined})); const id=`DEF-${content_hash.slice(0,16)}`;
   return productDefinitionSchema.parse({...body,id,content_hash,history:[{event:'created',at:created_at,content_hash}]});
