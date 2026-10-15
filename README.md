@@ -88,7 +88,13 @@ productkit --version        # 0.1.0-beta.1
 
 > The `productkit` on npm is a different project that happens to share the name, so install from the GitHub tag like above.
 
-Set up a workspace in your app folder and drop in your idea:
+A global install also links a `productkit` Skill into Claude Code and Codex (only the ones you already have). Open a new session in your app folder and just say the idea:
+
+> I want an app where friends share their running logs
+
+If the app has no `product/` workspace yet, the AI asks once whether to define the idea with ProductKit. Say yes and it runs `productkit init`, saves your words unchanged with `productkit intake`, and starts Clarification. Bug fixes and small edits don't trigger it. If the link is missing (say you installed with `npm install --ignore-scripts`), run `productkit setup` once. The [installation guide](docs/installation.md#connect-agent-skills) has the details.
+
+You can also drive it by hand:
 
 ```bash
 cd ~/projects/my-app
@@ -118,17 +124,7 @@ PRODUCT READINESS BLOCKED
 FAIL definition.required: Product Definition is missing.
 ```
 
-Hook up the Skills so Claude Code or Codex can handle each step (see the [installation guide](docs/installation.md)):
-
-```bash
-PRODUCTKIT_ROOT="$(npm root -g)/productkit"
-mkdir -p .claude/skills
-for skill in clarify model graph challenge propose define validate; do
-  ln -s "$PRODUCTKIT_ROOT/skills/$skill" ".claude/skills/$skill"
-done
-```
-
-Then type `/clarify` in Claude Code and answer the questions. Once the definition is approved, you can export it to OpenSpec:
+Once the definition is approved, you can export it to OpenSpec:
 
 ```bash
 productkit export openspec --change <change-id> --capability <capability-id>

@@ -88,7 +88,13 @@ productkit --version        # 0.1.0-beta.1
 
 > npm에 있는 `productkit`은 이름만 같은 다른 프로젝트예요. 그래서 위처럼 GitHub 태그로 설치해야 해요.
 
-앱 폴더에서 workspace를 만들고 아이디어를 넣어요.
+전역으로 설치하면 Claude Code나 Codex(이미 쓰고 있는 것만)에 `productkit` Skill도 같이 연결돼요. 앱 폴더에서 새 세션을 열고 아이디어를 그냥 말하면 돼요.
+
+> 친구들이랑 러닝 기록을 공유하는 앱을 만들고 싶어
+
+앱에 `product/` workspace가 아직 없으면 AI가 ProductKit으로 정의할지 한 번 물어봐요. 좋다고 하면 `productkit init`을 하고, 한 말을 고치지 않고 그대로 `productkit intake`로 저장한 다음 Clarification을 시작해요. 버그 수정이나 작은 수정에는 끼어들지 않아요. 연결이 안 돼 있으면(예: `npm install --ignore-scripts`로 설치했을 때) `productkit setup`을 한 번 실행해 주세요. 자세한 건 [설치 가이드](docs/installation.md#connect-agent-skills)에 있어요.
+
+명령으로 직접 해도 돼요.
 
 ```bash
 cd ~/projects/my-app
@@ -118,17 +124,7 @@ PRODUCT READINESS BLOCKED
 FAIL definition.required: Product Definition is missing.
 ```
 
-Claude Code나 Codex가 단계마다 일을 할 수 있게 Skill을 연결해요([설치 가이드](docs/installation.md)).
-
-```bash
-PRODUCTKIT_ROOT="$(npm root -g)/productkit"
-mkdir -p .claude/skills
-for skill in clarify model graph challenge propose define validate; do
-  ln -s "$PRODUCTKIT_ROOT/skills/$skill" ".claude/skills/$skill"
-done
-```
-
-그다음 Claude Code에서 `/clarify`라고 입력하고 질문에 답하면 돼요. 정의가 승인되면 OpenSpec으로 내보낼 수 있어요.
+정의가 승인되면 OpenSpec으로 내보낼 수 있어요.
 
 ```bash
 productkit export openspec --change <change-id> --capability <capability-id>

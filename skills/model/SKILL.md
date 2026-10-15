@@ -79,19 +79,18 @@ status: in_progress   # in_progress | needs_review | modeled — CLI가 다시 �
 
 **`final`을 직접 지어내지 않는다.** `productkit` CLI는 NodeGroup 파일을 쓰지
 않으므로(읽고 판정만 한다), `final`도 AI가 채워야 한다 — 단, 값을 스스로
-고르지 말고 설치된 `productkit` 패키지의 `evaluateAtomicityFinal()` 함수에
-위 세 필드값을 그대로 넣어 나온 결과를 적는다:
+고르지 말고 위 세 필드값을 그대로 `productkit compute atomicity-final`에 넣어
+나온 결과를 적는다(패키지의 `evaluateAtomicityFinal()`을 부른다. 전역 설치에서는
+`import('productkit')`가 동작하지 않으니 쓰지 않는다):
 
 ```sh
-node -e "
-import('productkit').then(({ evaluateAtomicityFinal }) => {
-  console.log(evaluateAtomicityFinal({
-    single_verifiable_subject: { verdict: 'yes', reason: '...' },
-    decomposability: { verdict: 'not_applicable', reason: '...' },
-    meaning_preservation: { verdict: 'preserved', confidence: 'high', reason: '...' },
-  }));
-});
-"
+productkit compute atomicity-final - <<'JSON'
+{
+  "single_verifiable_subject": { "verdict": "yes", "reason": "..." },
+  "decomposability": { "verdict": "not_applicable", "reason": "..." },
+  "meaning_preservation": { "verdict": "preserved", "confidence": "high", "reason": "..." }
+}
+JSON
 ```
 
 `productkit model`은 이 값을 **다시 계산해서 대조**한다 — 세 필드와 안 맞는

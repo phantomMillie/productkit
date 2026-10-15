@@ -55,11 +55,11 @@ describe('help', () => {
     expect(text).toContain('--file');
   });
 
-  it('clarify --help explains the manual .claude/skills/ link, without writing anything', async () => {
+  it('clarify --help points to productkit setup, without writing anything', async () => {
     const output = createMemoryOutput();
     expect(await runCli(['clarify', '--help'], output)).toBe(ExitCode.OK);
     const text = output.stdout.join('\n');
-    expect(text).toContain('.claude/skills/clarify/SKILL.md');
+    expect(text).toContain('productkit setup');
     expect(text).toContain('never writes outside product/');
   });
 });
