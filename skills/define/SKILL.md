@@ -56,9 +56,11 @@ Report the Definition and artifact IDs, provenance snapshot, policy conflict can
 
 `before_hash` / `after_hash` are `productkit compute text-hash <file>` of the exact text.
 
-### Freeze points
+### Freeze points and amendments
 
-- After the first `verify`, do not change anything the verification fingerprint covers (Findings' claims, Nodes, Graph, ImpactReports, Policies, Journeys, the Definition, Decisions, the installed Skills). A stale verified Application cannot be re-verified, and every planned Application must end applied and verified — there is no delete. Do not plan speculative Applications and do not roll back.
+- Every planned Application of an active Decision must end applied and verified — there is no delete. Do not plan speculative Applications and do not roll back.
+- A verification records the artifact hashes it saw. When something else changes later (another Policy, a Decision, an assumption), the Application reports `Post-application verification inputs changed`; run `define application verify` again. Only a changed Decision or changed target files make an Application truly stale.
+- To amend after verification, record a Decision with `supersedes_decision_ref` and plan its own Application that replaces the affected targets (`before_content` = current text; the new content must cite the new Decision). Applications of superseded Decisions are history and no longer count for readiness. Then re-verify the other Applications and redo the semantic review.
 - Each target file must still equal its Application's `after_hash`. Two Applications writing different content to the same file make the earlier one stale; write the Definition once and use no-op targets.
 - Do not upgrade ProductKit mid-pipeline: Skill texts are part of the hashed inputs.
 
