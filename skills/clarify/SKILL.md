@@ -13,14 +13,18 @@ Clarification artifact를 만든다.
 ## 진입 조건과 실패 시 대안
 
 이 Skill은 Claude Code의 네이티브 자동선택 기능 없이도 동작해야 한다 — 사용자가
-자연어로 아이디어를 설명하면 Agent가 직접 판단해 아래 명령을 실행한다.
+자연어로 아이디어를 설명하면 Agent가 직접 판단해 아래 명령을 실행한다. 아이디어를
+처음 받는 진입 흐름은 `skills/productkit/SKILL.md`(설치 시 `productkit setup`이
+Agent에 연결)가 맡는다.
 
 1. `productkit` 명령을 찾을 수 없다 → 사용자에게 설치를 안내한다(`README.md`
    참고). 이 instruction을 더 진행할 수 없다.
-2. `productkit clarify` 실행 결과가 "No ProductKit workspace found" → 먼저
-   `productkit init`을 실행하라고 안내한다.
-3. `productkit clarify` 실행 결과가 "No prompt found" → 먼저 `productkit intake
-   "<프롬프트>"`를 실행하라고 안내한다.
+2. `productkit clarify` 실행 결과가 "No ProductKit workspace found" → 사용자에게
+   ProductKit으로 정의할지 한 번 묻고(`product/` 폴더가 생긴다고 알린다), 수락하면
+   `productkit init`을 실행한다.
+3. `productkit clarify` 실행 결과가 "No prompt found" → 사용자 발화 원문을 그대로
+   임시 파일에 쓰고 `productkit intake --file <파일>`로 저장한다. 요약·번역하지
+   않는다.
 4. 위 세 경우가 아니면 CLI가 안내하는 입력 경로·출력 경로를 그대로 따른다.
 
 ## 입력 파일
@@ -36,6 +40,7 @@ Clarification artifact를 만든다.
 ```yaml
 id: CLR-001
 prompt_ref: PRM-001
+prompt_content_hash: <PRM-001.yaml의 content_hash 그대로>
 steps:
   definition: []        # [{term, meaning, origin: user_stated | ai_inferred}]
   decomposition: []     # [{statement, span_refs: [Prompt의 spans id, ...]}]
@@ -70,20 +75,14 @@ finding_candidates: []   # [{statement, type: ambiguity|contradiction|missing_pr
 
 1. `steps`를 바탕으로 사용자 의도를 논리 구조 그대로 재구성한 문장을 만들어
    (`presented_statement`) 원문과 나란히 사용자에게 보여주고 동의를 구한다.
-2. `steps` 전체를 정규화(키 정렬 JSON)해 해시한다. 설치된 `productkit` 패키지의
-   `stepsContentHashFromYaml(yamlText)` 함수를 그대로 쓴다 — 직접 구현하거나
-   다른 YAML 파서를 따로 불러오지 않는다(해시 방식이 CLI의 검증 로직과
-   반드시 같아야 하고, `yaml` 패키지를 이 프로젝트가 별도로 의존하지 않아도
-   되게 하기 위함). 예:
+2. `steps` 전체를 정규화(키 정렬 JSON)해 해시한다. `productkit compute
+   steps-hash`를 그대로 쓴다 — 직접 구현하거나 다른 YAML 파서를 따로 불러오지
+   않는다(해시 방식이 CLI의 검증 로직과 반드시 같아야 하기 때문). 이 명령은
+   패키지의 `stepsContentHashFromYaml`을 부른다. 전역 설치에서는
+   `import('productkit')`로 패키지를 찾을 수 없으니 쓰지 않는다. 예:
 
    ```sh
-   node -e "
-   const fs = require('fs');
-   import('productkit').then(({ stepsContentHashFromYaml }) => {
-     const text = fs.readFileSync(process.argv[1], 'utf8');
-     console.log(stepsContentHashFromYaml(text));
-   });
-   " product/discovery/CLR-001.yaml
+   productkit compute steps-hash product/discovery/CLR-001.yaml
    ```
 
 3. 사용자의 실제 응답을 받는다 — `agreed`, `disagreed`, `partially_agreed` 중
@@ -94,14 +93,24 @@ finding_candidates: []   # [{statement, type: ambiguity|contradiction|missing_pr
    - id: IC-001
      presented_statement: "..."
      presented_hash: "<2번에서 계산한 해시>"
+     prompt_ref: PRM-001
+     prompt_content_hash: "<PRM-001.yaml의 content_hash>"
      user_response: agreed
      user_statement: "<사용자의 실제 발언>"
      checked_at: "2026-10-12T00:00:00Z"
-     entry_hash: "<computeEntryHash로 계산한 값>"
+     entry_hash: "<productkit compute entry-hash 결과>"
    ```
 
-   `entry_hash`도 같은 방식으로 `productkit` 패키지의 `computeEntryHash({id 제외,
-   entry_hash 제외한 나머지 필드})`를 써서 계산한다.
+   `prompt_ref`·`prompt_content_hash`는 Clarification 최상위 값과 같아야 한다. 빠지면
+   완료 판정이 `invalid_prompt_reference`로 막힌다.
+
+   `entry_hash`는 `entry_hash`만 뺀 나머지 필드 전부(**`id` 포함**)를 JSON으로
+   넘겨 `productkit compute entry-hash`로 계산한다. CLI 판정도 같은 필드로 다시
+   계산한다. 예:
+
+   ```sh
+   productkit compute entry-hash entry.json   # 또는 - 로 stdin
+   ```
 5. 사용자가 동의하지 않으면 관련 단계를 다시 수행하고 2~4를 반복한다. **기존
    `interpretation_check` 항목은 그대로 둔다.**
 6. `steps`를 수정한 뒤에는 이전 `interpretation_check`가 더는 현재 내용을

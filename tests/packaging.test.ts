@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { execFile } from 'node:child_process';
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, readFile, readlink, realpath, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -52,6 +52,11 @@ describe('npm package contents', () => {
     expect(templates.length).toBe(14);
   });
 
+  it('includes the entry Skill and the postinstall script', () => {
+    expect(tarEntries).toContain('skills/productkit/SKILL.md');
+    expect(tarEntries).toContain('scripts/postinstall.mjs');
+  });
+
   it('does not ship tests or openspec artifacts', () => {
     expect(tarEntries.some((entry) => entry.startsWith('tests/'))).toBe(false);
     expect(tarEntries.some((entry) => entry.startsWith('openspec/'))).toBe(false);
@@ -101,4 +106,41 @@ describe('installed CLI outside the repository', () => {
     expect((result as { stderr?: string }).stderr).toContain('Product Definition is missing');
     await expect(stat(path.join(consumer, 'openspec/changes/unapproved-test'))).rejects.toMatchObject({ code: 'ENOENT' });
   }, 60_000);
+});
+
+describe('entry Skill linking on install', () => {
+  /** Child env with a throwaway home; the real npm cache keeps installs offline-friendly. */
+  async function isolatedEnv(home: string): Promise<NodeJS.ProcessEnv> {
+    const { stdout } = await run('npm', ['config', 'get', 'cache']);
+    const env: NodeJS.ProcessEnv = { ...process.env, HOME: home, npm_config_cache: stdout.trim() };
+    delete env.CLAUDE_CONFIG_DIR;
+    delete env.CODEX_HOME;
+    delete env.PRODUCTKIT_SKIP_SETUP;
+    for (const key of Object.keys(env)) if (key.toLowerCase() === 'npm_config_global') delete env[key];
+    return env;
+  }
+  const present = (p: string) => lstat(p).then(() => true, () => false);
+
+  it('a global install links the entry Skill into existing Agent folders only', async () => {
+    const home = path.join(workDir, 'home-global');
+    const prefix = path.join(workDir, 'prefix');
+    await mkdir(path.join(home, '.claude'), { recursive: true });
+    await run('npm', ['install', '--global', '--prefix', prefix, '--silent', tarball], { cwd: workDir, env: await isolatedEnv(home) });
+
+    const link = path.join(home, '.claude', 'skills', 'productkit');
+    const installed = path.join(prefix, 'lib', 'node_modules', 'productkit', 'skills', 'productkit');
+    expect(await realpath(path.resolve(path.dirname(link), await readlink(link)))).toBe(await realpath(installed));
+    expect(await present(path.join(home, '.codex'))).toBe(false);
+  }, 300_000);
+
+  it('a project-dependency install writes nothing to the home folder', async () => {
+    const home = path.join(workDir, 'home-local');
+    const project = path.join(workDir, 'project-local');
+    await mkdir(path.join(home, '.claude'), { recursive: true });
+    await mkdir(project, { recursive: true });
+    const env = await isolatedEnv(home);
+    await run('npm', ['init', '-y'], { cwd: project, env });
+    await run('npm', ['install', '--no-save', '--silent', tarball], { cwd: project, env });
+    expect(await present(path.join(home, '.claude', 'skills'))).toBe(false);
+  }, 300_000);
 });

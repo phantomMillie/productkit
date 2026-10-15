@@ -13,6 +13,8 @@ import { registerProposalDecisionCommands } from './commands/proposal-decision.j
 import { registerDefinitionCommand } from './commands/definition.js';
 import { registerValidationCommands } from './commands/validation.js';
 import { registerExportCommand } from './commands/export.js';
+import { registerSetupCommand } from './commands/setup.js';
+import { registerComputeCommand } from './commands/compute.js';
 import { consoleOutput, type Output } from './output.js';
 
 const DESCRIPTION = [
@@ -21,7 +23,7 @@ const DESCRIPTION = [
   'ProductKit never calls an LLM. It manages files, schemas and validation;',
   'Claude Code or Codex handles the conversation and the reasoning.',
   '',
-  'Implemented in this release: init, intake, clarify, model, graph, challenge, propose, decide, assumption, migrate, define, validate, approve and export openspec.',
+  'Implemented in this release: setup, init, intake, clarify, model, graph, challenge, propose, decide, assumption, migrate, define, validate, approve, export openspec and compute.',
 ].join('\n');
 
 /**
@@ -77,11 +79,12 @@ export function buildProgram(output: Output = consoleOutput): Command {
     .addHelpText(
       'after',
       '\n' +
-        'This works the same whether or not Claude Code auto-selects a skill for it:\n' +
+        'This works the same whether or not an Agent auto-selects a skill for it:\n' +
         'the Agent runs this command directly and reads the instruction path it prints.\n' +
-        'To let Claude Code auto-select it from a natural-language idea, manually link\n' +
-        '.claude/skills/clarify/SKILL.md to the installed skills/clarify/SKILL.md —\n' +
-        '"productkit init" never writes outside product/, so it does not do this for you.',
+        'So that Claude Code / Codex offer ProductKit when you describe an idea, run\n' +
+        '"productkit setup" once (a global npm install does it for you). It links the\n' +
+        'productkit entry Skill into your user Skill folder; "productkit init" still\n' +
+        'never writes outside product/.',
     )
     .exitOverride()
     .action(async (opts: { prompt?: string }) => {
@@ -104,6 +107,8 @@ export function buildProgram(output: Output = consoleOutput): Command {
   registerDefinitionCommand(program, output);
   registerValidationCommands(program, output);
   registerExportCommand(program, output);
+  registerSetupCommand(program, output);
+  registerComputeCommand(program, output);
 
   return program;
 }

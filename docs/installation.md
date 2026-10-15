@@ -25,22 +25,31 @@ To update, install the next approved tag explicitly using the same command and r
 
 ## Connect Agent Skills
 
-ProductKit ships shared `SKILL.md` directories. It does not edit the consuming project's `.claude/` or `.agents/` directories. Link only the needed skills into the project, and keep these machine-specific links out of shared source control unless the team intentionally maintains portable relative links.
+A global install links one entry Skill, `productkit`, into the user Skill folder of each Agent you already have:
 
-On macOS/Linux, from the consuming project root:
+| Agent | Link |
+|---|---|
+| Claude Code | `$CLAUDE_CONFIG_DIR/skills/productkit`, or `~/.claude/skills/productkit` |
+| Codex | `$CODEX_HOME/skills/productkit`, or `~/.codex/skills/productkit` |
+
+With that link in place, describe a new product or feature idea to the Agent. If the repository already has a `product/` workspace, the Agent saves your own words with `productkit intake` and starts Clarification. If it does not, the Agent asks once before running `productkit init`. Bug fixes, small edits and questions do not trigger it, and a repository whose own instructions name a different planning process keeps that process; the Agent only mentions ProductKit as an option. Start a new Agent session after the link is created.
+
+The install only links Agents whose config folder already exists, never replaces an existing entry, never fails the install, and does nothing for a project-dependency (non-global) install. Set `PRODUCTKIT_SKIP_SETUP=1` to skip it.
+
+Run the link step yourself when the install did not run it (`npm install --ignore-scripts`, `npm link`) or to change it:
 
 ```sh
-PRODUCTKIT_ROOT="$(npm root -g)/productkit"
-mkdir -p .claude/skills .agents/skills
-for skill in clarify model graph challenge propose define validate; do
-  ln -s "$PRODUCTKIT_ROOT/skills/$skill" ".claude/skills/$skill"
-  ln -s "$PRODUCTKIT_ROOT/skills/$skill" ".agents/skills/$skill"
-done
+productkit setup                 # link for every Agent whose config folder exists
+productkit setup --agent codex   # name an Agent; creates its folder if needed
+productkit setup --dry-run       # show what would change
+productkit setup --remove        # remove the link this installation created
 ```
 
-Claude Code discovers project Skills under `.claude/skills/<name>/SKILL.md`; invoke one by its Skill name (for example, `/clarify`). Codex can discover the same project-scoped Agent Skills under `.agents/skills/<name>/SKILL.md`; ask Codex to use the relevant ProductKit Skill. Start a new session if the Agent has not discovered newly linked Skills.
+`setup` writes one symlink per Agent and nothing else. A real directory or file at the link path is never touched; a symlink that points to a different location is replaced only with `--force`. `productkit init` still writes only inside `product/`.
 
-The commands above assume a global npm install. For a local npm prefix, replace `$(npm root -g)/productkit` with that prefix's `node_modules/productkit` path. On Windows, create directory junctions from an elevated or symlink-enabled PowerShell session, or copy the Skill directories into the same discovery paths; do not copy authentication settings.
+Only the entry Skill is linked. Each stage Skill (`clarify`, `model`, `graph`, `challenge`, `propose`, `define`, `validate`) is read from the path the CLI prints as `Instruction:`, so stage names never collide with other Skills. Helper values the stage Skills need (steps hash, entry hash, atomicity verdict) come from `productkit compute`, which works from any directory; `import('productkit')` does not resolve a global install.
+
+On Windows, symlink creation may need Developer Mode or an elevated shell. If `setup` reports an error, copy `skills/productkit` from the installed package into the same Skill folder instead; do not copy authentication settings.
 
 ## ProductKit and OpenSpec
 
@@ -54,6 +63,6 @@ Export still requires a current ProductKit Approval and runs OpenSpec Strict Val
 
 ## Workspace and user decisions
 
-Run `productkit init` in the target app, then follow the relevant Skills and CLI help. The CLI checks structure, references and hashes; it does not perform semantic review or create user confirmations. Only the actual user may provide and record Clarification confirmation, relationship confirmation, Decisions, or final Approval. Never put real product data into this ProductKit source repository.
+Tell the Agent your idea (or run `productkit init` in the target app yourself), then follow the relevant Skills and CLI help. The CLI checks structure, references and hashes; it does not perform semantic review or create user confirmations. Only the actual user may provide and record Clarification confirmation, relationship confirmation, Decisions, or final Approval. Never put real product data into this ProductKit source repository.
 
 For a company workspace, follow company data-classification, retention, AI-tool, and repository policies before providing prompts or generated artifacts to an Agent. ProductKit does not authorize transferring company data to a personal account or service.

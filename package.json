@@ -13,6 +13,7 @@
     "dist",
     "templates",
     "skills",
+    "scripts/postinstall.mjs",
     "CONSTITUTION.md",
     "README.md"
   ],
@@ -22,6 +23,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "prepare": "npm run build",
+    "postinstall": "node scripts/postinstall.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "prepack": "npm run build"
