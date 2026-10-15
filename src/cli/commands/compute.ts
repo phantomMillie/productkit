@@ -14,6 +14,9 @@ import { atomicitySchema, computeStructuralSignal, evaluateAtomicityFinal } from
 import { findingContentHash, toFindingInput } from '../../schema/finding.js';
 import { currentChallengeInputs } from '../../clarification/challenge-store.js';
 import { readCurrentFindings, readProposals } from '../../clarification/proposal-decision-store.js';
+import { createJourney, createPolicy } from '../../schema/definition.js';
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
+import { sha256Hex } from '../../clarification/hash.js';
 import { ensureWorkspace } from '../../clarification/workspace.js';
 import type { Output } from '../output.js';
 
@@ -138,6 +141,36 @@ export async function runFindingClaimHash(id: string, options: { cwd?: string | 
   output.out(findingContentHash(toFindingInput(finding)));
 }
 
+/**
+ * Completes a Policy or Journey draft with its id/content_hash and prints the
+ * exact YAML to use as an Application target's after_content. Policies and
+ * Journeys are written only through Applications, and their hashes are
+ * otherwise library-only.
+ */
+export async function runArtifact(kind: 'policy' | 'journey', source: string, options: ComputeOptions, output: Output): Promise<void> {
+  const text = await readInput(source, options);
+  let draft: Record<string, unknown>;
+  try {
+    draft = parseYaml(text) as Record<string, unknown>;
+  } catch (cause) {
+    throw new CliError(`${source} is not valid YAML: ${describeCause(cause)}`, ExitCode.USAGE_OR_IO);
+  }
+  try {
+    const { content_hash: _hash, ...rest } = draft;
+    const artifact = kind === 'policy'
+      ? createPolicy(rest as Parameters<typeof createPolicy>[0])
+      : createJourney((({ id: _id, ...body }) => body)(rest) as Parameters<typeof createJourney>[0]);
+    output.out(stringifyYaml(artifact).replace(/\n$/, ''));
+  } catch (cause) {
+    throw new CliError(`${source} is not a valid ${kind} draft: ${describeCause(cause)}`, ExitCode.USAGE_OR_IO);
+  }
+}
+
+/** sha256 of the exact text, for Application before_hash/after_hash. */
+export async function runTextHash(source: string, options: ComputeOptions, output: Output): Promise<void> {
+  output.out(sha256Hex(await readInput(source, options)));
+}
+
 export function registerComputeCommand(program: Command, output: Output): void {
   const compute = program
     .command('compute')
@@ -178,6 +211,24 @@ export function registerComputeCommand(program: Command, output: Output): void {
     .argument('<finding>', 'Finding ID (FND-...)')
     .description('print a Finding claim_hash (finding_refs[].claim_hash, Assumption finding_hash)')
     .action(async (id: string) => runFindingClaimHash(id, {}, output));
+
+  compute
+    .command('policy')
+    .argument('<draft>', 'Policy YAML without content_hash, or - for stdin')
+    .description('print the Policy with its content_hash, ready to use as Application after_content')
+    .action(async (source: string) => runArtifact('policy', source, {}, output));
+
+  compute
+    .command('journey')
+    .argument('<draft>', 'Journey YAML without id/content_hash, or - for stdin')
+    .description('print the Journey with its id and content_hash, ready to use as Application after_content')
+    .action(async (source: string) => runArtifact('journey', source, {}, output));
+
+  compute
+    .command('text-hash')
+    .argument('<file>', 'file whose exact text is hashed, or - for stdin')
+    .description('print sha256 of the exact text (Application before_hash / after_hash)')
+    .action(async (source: string) => runTextHash(source, {}, output));
 
   compute
     .command('atomicity-final')

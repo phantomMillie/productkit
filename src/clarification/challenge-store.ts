@@ -8,6 +8,7 @@ import { readFindings } from './finding-store.js';
 import { challengeAreas, challengeRunHash, challengeRunSchema, judgeChallengeCompletion, type ChallengeRun } from '../schema/challenge.js';
 import { canonicalJson, sha256Hex } from './hash.js';
 import { parseImpactReport } from '../schema/impact.js';
+import { findingSnapshotHash } from '../schema/finding.js';
 import { SKILLS_ROOT } from './skills.js';
 
 const reviewDir = (root: string) => path.join(root, 'reviews');
@@ -29,7 +30,7 @@ export async function currentChallengeInputs(root: string): Promise<{ inputs: Ar
   const candidates = await readRelationCandidates(root); for (const item of candidates) inputs.push({ kind: 'relation_candidate', ref: item.id, content_hash: sha256Hex(canonicalJson(item)) });
   const graphRoot = path.join(root, 'graph'); const reportFiles = [...(await files(graphRoot)).filter((f) => f !== 'edges.yaml'), ...(await files(path.join(graphRoot, 'reports'))).map((f) => path.join('reports', f))];
   for (const file of reportFiles) { const raw = await readFile(path.join(graphRoot, file), 'utf8'); const parsed = parseImpactReport(raw); inputs.push({ kind: 'impact_report', ref: parsed.analysis_id, content_hash: sha256Hex(canonicalJson(parsed)) }); }
-  for (const finding of await readFindings(root)) inputs.push({ kind: 'finding', ref: finding.id, content_hash: sha256Hex(canonicalJson(finding)) });
+  for (const finding of await readFindings(root)) inputs.push({ kind: 'finding', ref: finding.id, content_hash: findingSnapshotHash(finding) });
   const skillText = await readFile(path.join(SKILLS_ROOT, 'challenge', 'SKILL.md'), 'utf8');
   inputs.push({ kind: 'skill', ref: 'challenge/SKILL.md', content_hash: sha256Hex(skillText) });
   inputs.push({ kind: 'rules', ref: 'challenge-rules-v1', content_hash: sha256Hex(canonicalJson({ version: 1, areas: challengeAreas })) });

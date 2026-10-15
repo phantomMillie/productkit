@@ -1,6 +1,6 @@
 import { parse as parseYaml } from 'yaml';
 import { z } from 'zod';
-import { canonicalJson, sha256Hex } from '../clarification/hash.js';
+import { canonicalJson, sha256Hex, trimDeep } from '../clarification/hash.js';
 import { impactReportSchema } from './impact.js';
 
 const hash = z.string().regex(/^[0-9a-f]{64}$/);
@@ -37,7 +37,7 @@ export const policySchema = z.object({
   context: z.string().trim().min(1), actor: z.string().trim().min(1),
   condition_text: z.string().trim().min(1), condition: policyConditionSchema,
   action: z.string().trim().min(1), outcome: z.string().trim().min(1),
-  exceptions: z.array(z.object({ statement: z.string().trim().min(1), relation_ref: id('EDG').optional(), source_refs: z.array(productArtifactRefSchema).min(1) }).strict()),
+  exceptions: z.array(z.object({ statement: z.string().trim().min(1), relation_ref: z.string().regex(/^EDG-[A-Za-z0-9-]+$/).optional(), source_refs: z.array(productArtifactRefSchema).min(1) }).strict()),
   priority: z.object({ value: z.number().finite(), decision_ref: id('DEC') }).strict().optional(),
   provenance, supersedes_policy_ref: id('POL').optional(), content_hash: hash,
 }).strict().superRefine((policy, ctx) => {
@@ -138,9 +138,9 @@ export function parsePolicy(text:string):Policy{return policySchema.parse(parseY
 export function parseJourney(text:string):Journey{return journeySchema.parse(parseYaml(text));}
 export function parseApplication(text:string):Application{return applicationSchema.parse(parseYaml(text));}
 
-export function createPolicy(input:Omit<Policy,'content_hash'>):Policy { return policySchema.parse({...input,content_hash:sha256Hex(canonicalJson(input))}); }
-export function createJourney(input:Omit<Journey,'id'|'content_hash'>):Journey { const content_hash=sha256Hex(canonicalJson({...input,id:undefined,content_hash:undefined})); return journeySchema.parse({...input,id:`JRN-${content_hash.slice(0,16)}`,content_hash}); }
-export function createProductDefinition(input:Omit<ProductDefinition,'id'|'content_hash'|'history'|'created_at'>,now=new Date()):ProductDefinition {
-  const created_at=now.toISOString(); const body={...input,created_at}; const content_hash=sha256Hex(canonicalJson({...body,created_at:undefined})); const id=`DEF-${content_hash.slice(0,16)}`;
+export function createPolicy(raw:Omit<Policy,'content_hash'>):Policy { const input=trimDeep(raw); return policySchema.parse({...input,content_hash:sha256Hex(canonicalJson(input))}); }
+export function createJourney(raw:Omit<Journey,'id'|'content_hash'>):Journey { const input=trimDeep(raw); const content_hash=sha256Hex(canonicalJson({...input,id:undefined,content_hash:undefined})); return journeySchema.parse({...input,id:`JRN-${content_hash.slice(0,16)}`,content_hash}); }
+export function createProductDefinition(raw:Omit<ProductDefinition,'id'|'content_hash'|'history'|'created_at'>,now=new Date()):ProductDefinition {
+  const input=trimDeep(raw); const created_at=now.toISOString(); const body={...input,created_at}; const content_hash=sha256Hex(canonicalJson({...body,created_at:undefined})); const id=`DEF-${content_hash.slice(0,16)}`;
   return productDefinitionSchema.parse({...body,id,content_hash,history:[{event:'created',at:created_at,content_hash}]});
 }

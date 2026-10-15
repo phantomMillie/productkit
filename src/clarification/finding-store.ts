@@ -2,7 +2,7 @@ import { readdir, readFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { stringify as stringifyYaml } from 'yaml';
 import { CliError, ExitCode } from '../errors.js';
-import { createFinding, findingSchema, parseFinding, toFindingInput, appendFindingConfirmation, type Finding, type FindingInput } from '../schema/finding.js';
+import { createFinding, findingSchema, parseFinding, toFindingInput, appendFindingConfirmation, appendFindingResolution, findingContentHash, type Finding, type FindingInput } from '../schema/finding.js';
 import { atomicCreateFile, atomicReplaceIfUnchanged } from './io.js';
 import { loadGraphWorkspace } from './provenance.js';
 import { readGraphDocument, readRelationCandidates } from './graph-store.js';
@@ -53,4 +53,27 @@ export async function confirmFinding(root: string, id: string, response: 'confir
   const missing = await validateFindingReferences(root, current); if (missing.length) throw new CliError(`Finding has unresolved references: ${missing.join(', ')}`, ExitCode.GATE_BLOCKED);
   const updated = appendFindingConfirmation(current, response, statement, rationale);
   await atomicReplaceIfUnchanged(file, before, stringifyYaml(updated)); return updated;
+}
+
+/**
+ * Marks the Findings a content Decision targets as resolved once its
+ * Application is applied and verified. Scope-exclusion Decisions never
+ * resolve a Finding (the exclusion route keeps it unresolved by design), and
+ * a Finding whose claim changed since the Decision is left alone.
+ */
+export async function resolveFindingsByDecision(root: string, decision: { id: string; decision_type: string; finding_refs: Array<{ finding_ref: string; claim_hash: string }> }, applicationId: string, now = new Date()): Promise<string[]> {
+  if (decision.decision_type !== 'content_decision') return [];
+  const resolved: string[] = [];
+  for (const ref of decision.finding_refs) {
+    const file = path.join(findingsDir(root), `${ref.finding_ref}.yaml`);
+    let before: string;
+    try { before = await readFile(file, 'utf8'); } catch { continue; }
+    const current = parseFinding(before);
+    if (current.review_status !== 'confirmed' || current.resolution_status !== 'unresolved') continue;
+    if (findingContentHash(toFindingInput(current)) !== ref.claim_hash) continue;
+    const updated = appendFindingResolution(current, decision.id, `Resolved by Decision ${decision.id} through verified Application ${applicationId}.`, now);
+    await atomicReplaceIfUnchanged(file, before, stringifyYaml(updated));
+    resolved.push(current.id);
+  }
+  return resolved;
 }
